@@ -12,12 +12,6 @@ from typing import Any
 
 
 class UnderstandIntentNode(AgentNode):
-    """
-    Uses Claude to classify what the user wants.
-    Why Claude for routing: Natural language intent is ambiguous.
-    Claude handles typos, abbreviations, and context better than regex.
-    """
-
     def get_system_prompt(self, context: TaskContext) -> str:
         base = context.mission.as_system_prompt_fragment()
         return f"""{base}
@@ -28,6 +22,7 @@ Classify the intent into one of these categories:
 - ASK_QUESTION: owner is asking a question that needs a direct answer
 - CAPTURE_IDEA: owner is capturing an idea or note
 - STATUS_CHECK: owner wants to know status of something
+- RESET_MEMORY: owner said /reset or wants to clear conversation history
 - UNKNOWN: cannot classify
 
 Respond ONLY with JSON in this exact format:
@@ -129,6 +124,20 @@ class SendReplyNode(TransformNode):
             await send_message(chat_id, str(reply))
 
         return context.with_output(self.name, {"sent": True, "reply": str(reply)})
+
+
+class ResetMemoryNode(TransformNode):
+    """Clears conversation memory for this chat."""
+
+    def transform(self, data: Any) -> Any:
+        return data
+
+    async def execute(self, context: TaskContext) -> TaskContext:
+        from skills.memory import clear_history
+        chat_id = context.input.get("chat_id", "")
+        if chat_id:
+            await clear_history(chat_id)
+        return context.with_output(self.name, {"cleared": True})
 
 
 @register("telegram_message")

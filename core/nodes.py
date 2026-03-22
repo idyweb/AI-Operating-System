@@ -103,13 +103,21 @@ class AgentNode(BaseNode):
     async def execute(self, context: TaskContext) -> TaskContext:
         """
         Try primary model first, fall back through fallback list.
-        Why: Free tier models have rate limits and downtime.
-        Graceful degradation keeps the platform alive.
+        Injects conversation history if chat_id is in context input.
         """
         self._set_provider_keys()
 
         system = self.get_system_prompt(context)
         user = self.get_user_prompt(context)
+        chat_id = context.input.get("chat_id")
+
+        # Load conversation history if this is a chat-based workflow
+        history: list[dict] = []
+        if chat_id:
+            from skills.memory import get_history, save_message
+            history = await get_history(chat_id)
+            # Save current user message
+            await save_message(chat_id, "user", user)
 
         models_to_try = [self.model] + self.settings.fallback_models
         last_error = None
@@ -117,9 +125,40 @@ class AgentNode(BaseNode):
         for model in models_to_try:
             try:
                 logger.info("llm.trying", model=model, node=self.name)
-                output = await self._call_llm(model, system, user)
+
+                # Build messages — history + current user message
+                messages = history + [{"role": "user", "content": user}]
+
+                import litellm
+                response = await litellm.acompletion(
+                    model=model,
+                    messages=messages,
+                    system=system,
+                    max_tokens=self.max_tokens,
+                )
+                output = response.choices[0].message.content
+
+                # Log cost
+                try:
+                    cost = litellm.completion_cost(completion_response=response)
+                    logger.info(
+                        "llm.cost",
+                        model=model,
+                        node=self.name,
+                        input_tokens=response.usage.prompt_tokens,
+                        output_tokens=response.usage.completion_tokens,
+                        cost_usd=round(cost, 6),
+                    )
+                except Exception:
+                    pass
+
+                # Save assistant response to memory
+                if chat_id:
+                    await save_message(chat_id, "assistant", output)
+
                 logger.info("llm.success", model=model, node=self.name)
                 return context.with_output(self.name, output)
+
             except Exception as e:
                 logger.warning("llm.failed", model=model, error=str(e))
                 last_error = e

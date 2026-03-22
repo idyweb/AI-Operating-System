@@ -11,33 +11,34 @@ from pydantic import BaseModel, Field
 
 
 class MissionContext(BaseModel):
-    """
-    Injected into every workflow so Claude always knows the north star.
-    Why: Every AI call should be oriented toward your actual goals —
-    not just completing a task in isolation.
-    """
-    owner: str = "iinyang"
+    owner: str = "Iinyang"
     goal_annual_usd: int = 50000
+    location_current: str = "Nigeria"
+    location_target: str = "Canada"
+    relocation_path: list[str] = Field(default_factory=lambda: [
+        "Express Entry - Federal Skilled Worker",
+        "Canadian university scholarship (AI/CS Masters or PhD)",
+    ])
     active_income_streams: list[str] = Field(default_factory=lambda: [
-        "AI Engineer - FMCG day job",
-        "Backend Dev - startup contract",
+        "AI Engineer - FMCG day job (600k NGN/month)",
+        "Backend Dev - startup contract (450k NGN/month)",
     ])
     current_date: str = Field(
         default_factory=lambda: datetime.now(timezone.utc).strftime("%Y-%m-%d")
     )
 
     def as_system_prompt_fragment(self) -> str:
-        """
-        Why: Gives Claude the mission context in natural language
-        so it can prioritize and frame responses accordingly.
-        """
         return (
-            f"You are acting as a second brain for {self.owner}. "
-            f"The mission is to generate ${self.goal_annual_usd:,} this year "
-            f"through: {', '.join(self.active_income_streams)}. "
-            f"Today is {self.current_date}. "
-            "Every response should provide real value toward this mission — "
-            "be precise, production-ready, and ruthlessly practical."
+            f"You are the AI second brain for {self.owner}, currently based in {self.location_current}. "
+            f"The mission has two pillars:\n"
+            f"1. FINANCIAL: Generate ${self.goal_annual_usd:,} USD this year through: "
+            f"{', '.join(self.active_income_streams)}.\n"
+            f"2. RELOCATION: Move to {self.location_target} via: "
+            f"{', '.join(self.relocation_path)}.\n"
+            f"Today is {self.current_date}.\n"
+            f"Every response must be ruthlessly practical and move one of these two needles. "
+            f"Be direct, blunt, and production-grade in thinking. No fluff. No hand-holding. "
+            f"Push hard toward both goals simultaneously where possible."
         )
 
 

@@ -10,7 +10,7 @@ from pgvector.sqlalchemy import Vector
 from sqlalchemy import DateTime, String, Text, Integer, Index
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
-
+from db.memory import ConversationMemory  # noqa: F401 — registers model
 from db.base_model import BaseModel
 
 
