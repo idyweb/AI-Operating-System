@@ -67,7 +67,9 @@ def create_app() -> FastAPI:
     )
 
     # Register routers
-    from api.routers import health, workflows
+
+    from api.routers import health, workflows, telegram
+    app.include_router(telegram.router, prefix="/api/v1", tags=["telegram"])
     app.include_router(health.router, prefix="/api/v1", tags=["health"])
     app.include_router(workflows.router, prefix="/api/v1", tags=["workflows"])
 

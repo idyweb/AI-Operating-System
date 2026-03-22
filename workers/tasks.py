@@ -10,6 +10,9 @@ from celery import Task
 
 from workers.celery_app import celery_app, run_async
 
+import workflows.telegram_handler  # noqa: F401
+import workflows.daily_briefing # noqa: F401
+
 logger = structlog.get_logger()
 
 

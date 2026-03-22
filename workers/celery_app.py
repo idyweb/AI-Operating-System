@@ -9,6 +9,7 @@ from typing import Any
 import structlog
 from celery import Celery
 from celery.signals import worker_ready, worker_shutdown
+from celery.schedules import crontab
 
 from core.config import get_settings
 
@@ -48,7 +49,16 @@ celery_app.conf.update(
     task_max_retries=3,
 
     # Beat schedule (Layer 2 — scheduled workflows)
-    beat_schedule={},              # We'll populate this as we add scheduled workflows
+    beat_schedule={
+    "daily-briefing": {
+        "task": "workers.tasks.run_workflow",
+        "schedule": crontab(hour=7, minute=0),  # 7am UTC daily
+        "kwargs": {
+            "workflow_name": "daily_briefing",
+            "input_data": {},
+        },
+    },
+},
 )
 
 

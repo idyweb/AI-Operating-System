@@ -45,6 +45,40 @@ class Settings(BaseSettings):
     mission_goal_annual_usd: int = Field(default=50000)
     mission_owner: str = Field(default="iinyang")
 
+    # Telegram
+    telegram_bot_token: str = Field(default="")
+    telegram_webhook_secret: str = Field(default="")
+    allowed_telegram_user_ids: str = Field(default="")
+
+    # OpenRouter
+    openrouter_api_key: str = Field(default="")
+    openrouter_base_url: str = Field(default="https://openrouter.ai/api/v1")
+    llm_model: str = Field(default="")
+
+    @property
+    def free_models(self) -> list[str]:
+        """
+        Ordered list of free models to try.
+        Why ordered: First is preferred, falls back down the list on failure.
+        """
+        return [
+        "meta-llama/llama-3.3-70b-instruct:free",      # Best free model
+        "google/gemma-3-27b-it:free",                   # Google, strong
+        "mistralai/mistral-small-3.1-24b-instruct:free", # Mistral, reliable
+        "nousresearch/hermes-3-llama-3.1-405b:free",   # Huge, powerful
+        "qwen/qwen3-4b:free",                           # Fast fallback
+    ]
+
+    @property
+    def allowed_user_ids(self) -> list[int]:
+        """
+        Parse comma-separated user IDs into a list of ints.
+        Why: Security — only allow your own Telegram account to trigger workflows.
+        """
+        if not self.allowed_telegram_user_ids:
+            return []
+        return [int(uid.strip()) for uid in self.allowed_telegram_user_ids.split(",")]
+
     @property
     def database_url(self) -> str:
         """Async SQLAlchemy connection string."""
