@@ -1,0 +1,11 @@
+.venv
+__pycache__
+*.pyc
+.env
+.git
+.memory
+*.egg-info
+.pytest_cache
+.mypy_cache
+.ruff_cache
+second_brain.egg-info

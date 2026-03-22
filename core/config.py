@@ -21,8 +21,10 @@ class Settings(BaseSettings):
     app_env: str = Field(default="development")
     app_secret_key: str = Field(default="change-me")
 
-    # Anthropic
-    anthropic_api_key: str = Field(...)
+    # LLMs
+    anthropic_api_key: str = Field(default="")
+    openrouter_api_key: str = Field(default="")
+    gemini_api_key: str = Field(default="")
 
     # Postgres
     postgres_host: str = Field(default="localhost")
@@ -53,7 +55,20 @@ class Settings(BaseSettings):
     # OpenRouter
     openrouter_api_key: str = Field(default="")
     openrouter_base_url: str = Field(default="https://openrouter.ai/api/v1")
-    llm_model: str = Field(default="")
+    llm_model: str = Field(default="gemini/gemini-2.0-flash")
+
+    # Fallback models tried in order if primary fails
+    llm_fallback_models: str = Field(
+        default="openrouter/meta-llama/llama-3.3-70b-instruct:free,openrouter/google/gemma-3-27b-it:free"
+    )
+
+    @property
+    def fallback_models(self) -> list[str]:
+        """Parse comma-separated fallback models into a list."""
+        if not self.llm_fallback_models:
+            return []
+        return [m.strip() for m in self.llm_fallback_models.split(",")]
+    
 
     @property
     def free_models(self) -> list[str]:

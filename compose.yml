@@ -32,6 +32,7 @@ services:
     command: uv run uvicorn main:app --host 0.0.0.0 --port 8000 --reload
     volumes:
       - .:/app
+      - /app/.venv 
     ports:
       - "8000:8000"
     env_file: .env
@@ -51,6 +52,7 @@ services:
     command: uv run celery -A workers.celery_app worker --loglevel=info --concurrency=4
     volumes:
       - .:/app
+      - /app/.venv 
     env_file: .env
     depends_on:
       postgres:
@@ -63,6 +65,7 @@ services:
     command: uv run celery -A workers.celery_app beat --loglevel=info
     volumes:
       - .:/app
+      - /app/.venv
     env_file: .env
     depends_on:
       - worker

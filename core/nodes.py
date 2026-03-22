@@ -58,8 +58,9 @@ class BaseNode(ABC):
 
 class AgentNode(BaseNode):
     """
-    A node that calls an LLM to do intelligent work.
-    Supports Anthropic direct or OpenRouter (free models).
+    LLM-agnostic agent node via litellm.
+    Supports any provider — Gemini, Anthropic, OpenRouter, Ollama.
+    Switch models by changing LLM_MODEL in .env. Zero code changes.
     """
 
     def __init__(self) -> None:
@@ -67,105 +68,67 @@ class AgentNode(BaseNode):
         self.max_tokens = 8096
         self.model = self.settings.llm_model
 
-        # Use OpenRouter if configured, else fall back to Anthropic
-        if self.settings.openrouter_api_key:
-            import httpx
-            self._client_type = "openrouter"
-        elif self.settings.anthropic_api_key and not self.settings.anthropic_api_key.startswith("sk-ant-..."):
-            self._client_type = "anthropic"
-        else:
-            self._client_type = "none"
-
     def get_system_prompt(self, context: TaskContext) -> str:
         return context.mission.as_system_prompt_fragment()
 
     def get_user_prompt(self, context: TaskContext) -> str:
         return str(context.input)
 
-    async def _call_openrouter(self, system: str, user: str) -> str:
+    def _set_provider_keys(self) -> None:
         """
-        Call OpenRouter with automatic model fallback.
-        Why fallback: Free models have rate limits and occasional downtime.
-        Loop through until one succeeds.
+        Set API keys as environment variables for litellm.
+        Why: litellm reads keys from env vars per provider.
         """
-        import httpx
+        import os
+        if self.settings.anthropic_api_key:
+            os.environ["ANTHROPIC_API_KEY"] = self.settings.anthropic_api_key
+        if self.settings.openrouter_api_key:
+            os.environ["OPENROUTER_API_KEY"] = self.settings.openrouter_api_key
+        if self.settings.gemini_api_key:
+            os.environ["GEMINI_API_KEY"] = self.settings.gemini_api_key
 
-        headers = {
-            "Authorization": f"Bearer {self.settings.openrouter_api_key}",
-            "Content-Type": "application/json",
-            "HTTP-Referer": "https://github.com/second-brain",
-            "X-Title": "Second Brain",
-        }
-
-        # Use configured model or loop through free models
-        models_to_try = (
-            [self.settings.llm_model]
-            if self.settings.llm_model
-            else self.settings.free_models
-        )
-
-        last_error = None
-
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            for model in models_to_try:
-                try:
-                    payload = {
-                        "model": model,
-                        "messages": [
-                            {"role": "system", "content": system},
-                            {"role": "user", "content": user},
-                        ],
-                        "max_tokens": self.max_tokens,
-                    }
-
-                    logger.info("openrouter.trying_model", model=model)
-
-                    response = await client.post(
-                        f"{self.settings.openrouter_base_url}/chat/completions",
-                        headers=headers,
-                        json=payload,
-                    )
-                    response.raise_for_status()
-                    data = response.json()
-                    content = data["choices"][0]["message"]["content"]
-
-                    logger.info("openrouter.success", model=model)
-                    return content
-
-                except Exception as e:
-                    logger.warning(
-                        "openrouter.model_failed",
-                        model=model,
-                        error=str(e),
-                    )
-                    last_error = e
-                    continue
-
-        raise Exception(f"All models failed. Last error: {last_error}")
-    async def _call_anthropic(self, system: str, user: str) -> str:
-        """Call Anthropic API directly."""
-        from anthropic import AsyncAnthropic
-        client = AsyncAnthropic(api_key=self.settings.anthropic_api_key)
-        response = await client.messages.create(
-            model=self.model,
+    async def _call_llm(self, model: str, system: str, user: str) -> str:
+        """Call any LLM via litellm."""
+        import litellm
+        response = await litellm.acompletion(
+            model=model,
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ],
             max_tokens=self.max_tokens,
-            system=system,
-            messages=[{"role": "user", "content": user}],
         )
-        return response.content[0].text
+        return response.choices[0].message.content
 
     async def execute(self, context: TaskContext) -> TaskContext:
+        """
+        Try primary model first, fall back through fallback list.
+        Why: Free tier models have rate limits and downtime.
+        Graceful degradation keeps the platform alive.
+        """
+        self._set_provider_keys()
+
         system = self.get_system_prompt(context)
         user = self.get_user_prompt(context)
 
-        if self._client_type == "openrouter":
-            output = await self._call_openrouter(system, user)
-        elif self._client_type == "anthropic":
-            output = await self._call_anthropic(system, user)
-        else:
-            output = "No LLM provider configured. Add ANTHROPIC_API_KEY or OPENROUTER_API_KEY to .env"
+        models_to_try = [self.model] + self.settings.fallback_models
+        last_error = None
 
-        return context.with_output(self.name, output)
+        for model in models_to_try:
+            try:
+                logger.info("llm.trying", model=model, node=self.name)
+                output = await self._call_llm(model, system, user)
+                logger.info("llm.success", model=model, node=self.name)
+                return context.with_output(self.name, output)
+            except Exception as e:
+                logger.warning("llm.failed", model=model, error=str(e))
+                last_error = e
+                continue
+
+        return context.with_error(
+            self.name,
+            f"All LLM providers failed. Last error: {last_error}"
+        )
 
 
 class RouterNode(BaseNode):
