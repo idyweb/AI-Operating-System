@@ -54,6 +54,9 @@ services:
       - .:/app
       - /app/.venv 
     env_file: .env
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
     depends_on:
       postgres:
         condition: service_healthy
@@ -67,6 +70,9 @@ services:
       - .:/app
       - /app/.venv
     env_file: .env
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
     depends_on:
       - worker
 
